@@ -43,18 +43,38 @@ tester/            Python CLI to publish test payloads from a dev machine
 | Signal | Pico W physical pin | GPIO |
 |---|---|---|
 | Data in (first pixel) | pin 20 | GPIO15 |
-| 5V | external 5V supply, common ground with Pico | — |
-| GND | common ground with Pico GND | — |
+| 5V | shared 5V supply rail (see Power below) | — |
+| GND | shared GND rail (see Power below) | — |
 
 Daisy-chain the existing strip's data-out/5V/GND straight into the Jewel's
-data-in/5V/GND when it arrives. Power the LEDs from an external 5V supply
-rather than the Pico's USB VBUS — up to ~11 pixels at full white can draw
-~660mA, more than is comfortable to push through the Pico alongside WiFi.
-Tie all grounds together. A ~1000uF capacitor across 5V/GND at the first
-pixel and a ~300-500 ohm resistor in series on the data line are cheap
-insurance against the 3.3V-logic-on-5V-LED marginal voltage issue.
+data-in/5V/GND when it arrives. A ~1000uF capacitor across 5V/GND at the
+first pixel and a ~300-500 ohm resistor in series on the data line are
+cheap insurance against the 3.3V-logic-on-5V-LED marginal voltage issue.
 
 Pin numbers live in `firmware/config.py` if you need to wire it differently.
+
+### Power
+
+Run a single external 5V supply and split it (a "T") between the Pico and
+the NeoPixel chain, instead of powering the Pico over USB:
+
+| Rail | Pico W physical pin | Notes |
+|---|---|---|
+| 5V in | VSYS, pin 39 | Onboard regulator accepts 1.8-5.5V here; this is the intended external-power input, *not* the VBUS/USB pin (pin 40) |
+| GND | pin 38 (or any GND pin) | Same rail the NeoPixels and OLED GND tie into |
+
+Splitting one supply this way also gives the Pico and the NeoPixels a
+shared ground for free — no separate "tie grounds together" step needed.
+
+Size the supply for both loads combined: the Pico W itself draws roughly
+100-150mA (with WiFi TX spikes higher), and the NeoPixel chain can hit
+~660mA at 11 pixels full white — a 5V/2A supply gives comfortable
+headroom for both plus inrush.
+
+It's safe to also have USB plugged in at the same time as VSYS power
+(e.g. for `mpremote` during development) — there's a diode between VBUS
+and VSYS on the Pico that keeps the two supplies from fighting each
+other. Just never feed external 5V into the VBUS pin itself.
 
 ## Flashing the Pico W
 
