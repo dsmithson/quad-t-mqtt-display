@@ -10,7 +10,8 @@ from leds import LedController
 from mqtt_client import DeviceMqtt
 
 TICK_MS = int(1000 / config.TICK_HZ)
-WIFI_RETRY_MS = 2000
+WIFI_CONNECT_TIMEOUT_MS = 15000
+WIFI_POLL_MS = 250
 MQTT_RETRY_MS = 3000
 
 
@@ -19,12 +20,19 @@ def connect_wifi():
     wlan.active(True)
     if wlan.isconnected():
         return wlan
-    print("wifi: connecting to", config.WIFI_SSID)
-    wlan.connect(config.WIFI_SSID, config.WIFI_PASSWORD)
     while not wlan.isconnected():
-        print("wifi: waiting...")
-        time.sleep_ms(WIFI_RETRY_MS)
+        print("wifi: connecting to", config.WIFI_SSID)
+        # A stale/half-joined radio state confuses repeated connect() calls
+        # (it can wedge at status=STAT_CONNECTING forever), so start every
+        # attempt from a clean disconnect.
+        wlan.disconnect()
+        time.sleep_ms(300)
         wlan.connect(config.WIFI_SSID, config.WIFI_PASSWORD)
+        deadline = time.ticks_add(time.ticks_ms(), WIFI_CONNECT_TIMEOUT_MS)
+        while not wlan.isconnected() and time.ticks_diff(deadline, time.ticks_ms()) > 0:
+            time.sleep_ms(WIFI_POLL_MS)
+        if not wlan.isconnected():
+            print("wifi: attempt timed out (status=%s), retrying" % wlan.status())
     print("wifi: connected, ip =", wlan.ifconfig()[0])
     return wlan
 
