@@ -26,8 +26,16 @@ OLED_RES_PIN = 3
 
 # --- NeoPixels ---
 NEOPIXEL_PIN = 15
-# Set this once the real chain length is known (existing strip + Jewel).
-NUM_PIXELS = 11
+# Total physical pixels wired in the chain (salvaged board + Jewel).
+NUM_PIXELS_PHYSICAL = 15
+# Maps each externally-addressable "logical" pixel (index 0 = first pixel
+# MQTT can see) to its physical position in the chain. Pixels not listed
+# here are physically wired but hidden behind the panel -- boot_flash()
+# still exercises them as a hardware self-test, but apply()/as_state()
+# never touch or report them. Determine which physical indices are
+# visible by sending an alternating test pattern and looking at the
+# panel; adjust this list to match your build.
+VISIBLE_PIXEL_MAP = [0, 2, 4, 6, 8, 9, 10, 11, 12, 13, 14]
 
 # Render/poll loop tick rate, in Hz.
 TICK_HZ = 15

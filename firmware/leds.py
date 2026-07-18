@@ -33,20 +33,28 @@ class _Animation:
 
 
 class LedController:
-    """Wraps a neopixel.NeoPixel chain and applies the 'leds' array from an
-    incoming MQTT message: index 0 is the first pixel in the chain. Pixels
-    beyond the array length are left unchanged; entries beyond num_pixels
-    are ignored.
+    """Wraps a neopixel.NeoPixel chain of physical_count pixels, exposing
+    only a "logical" subset externally (via apply()/as_state(), what MQTT
+    talks about) per visible_map -- a list of physical indices, one per
+    logical position. This lets pixels that are physically wired but not
+    visible through the front panel stay invisible to MQTT consumers too.
+
+    apply()'s 'leds' argument is a list of {r,g,b} dicts indexed by LOGICAL
+    position (index 0 is the first visible pixel). Entries beyond the
+    logical count are ignored; a shorter list leaves the remaining logical
+    pixels unchanged.
 
     Supports optional non-blocking color transitions (transition_duration in
     seconds, transition_type "immediate"/"smooth"/"thruBlack") -- call
     tick() regularly from the main loop to advance them.
     """
 
-    def __init__(self, pin, num_pixels):
-        self.num_pixels = num_pixels
-        self.np = neopixel.NeoPixel(pin, num_pixels)
-        self.colors = [(0, 0, 0)] * num_pixels
+    def __init__(self, pin, physical_count, visible_map=None):
+        self.physical_count = physical_count
+        self.visible_map = list(visible_map) if visible_map is not None else list(range(physical_count))
+        self.num_pixels = len(self.visible_map)
+        self.np = neopixel.NeoPixel(pin, physical_count)
+        self.colors = [(0, 0, 0)] * physical_count
         self._animations = {}
         self._show()
 
@@ -56,16 +64,17 @@ class LedController:
         for i, entry in enumerate(leds):
             if i >= self.num_pixels:
                 break
+            phys = self.visible_map[i]
             target = (int(entry.get("r", 0)), int(entry.get("g", 0)), int(entry.get("b", 0)))
-            current = self.colors[i]
+            current = self.colors[phys]
             if target == current:
-                self._animations.pop(i, None)
+                self._animations.pop(phys, None)
                 continue
             if duration_ms <= 0 or transition_type == "immediate":
-                self.colors[i] = target
-                self._animations.pop(i, None)
+                self.colors[phys] = target
+                self._animations.pop(phys, None)
             else:
-                self._animations[i] = _Animation(current, target, now, duration_ms, transition_type)
+                self._animations[phys] = _Animation(current, target, now, duration_ms, transition_type)
         self._show()
 
     def tick(self, now_ms):
@@ -77,18 +86,26 @@ class LedController:
         if not self._animations:
             return False
         done = []
-        for i, anim in self._animations.items():
+        for phys, anim in self._animations.items():
             color, finished = anim.color_at(now_ms)
-            self.colors[i] = color
+            self.colors[phys] = color
             if finished:
-                done.append(i)
-        for i in done:
-            del self._animations[i]
+                done.append(phys)
+        for phys in done:
+            del self._animations[phys]
         self._show()
         return bool(done)
 
     def as_state(self):
-        return [{"r": r, "g": g, "b": b} for (r, g, b) in self.colors]
+        return [{"r": r, "g": g, "b": b} for (r, g, b) in (self.colors[p] for p in self.visible_map)]
+
+    def set_all_physical(self, color):
+        """Bench/boot self-test only: sets every physical pixel, including
+        ones hidden behind the panel and not exposed via apply()/as_state().
+        """
+        self.colors = [color] * self.physical_count
+        self._animations.clear()
+        self._show()
 
     def _show(self):
         for i, color in enumerate(self.colors):

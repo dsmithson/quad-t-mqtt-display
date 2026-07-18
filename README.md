@@ -82,7 +82,7 @@ other. Just never feed external 5V into the VBUS pin itself.
    https://micropython.org/download/RPI_PICO_W/.
 2. Copy `firmware/config.example.py` to `firmware/config.py` and fill in
    your WiFi SSID/password and (optionally) adjust `MQTT_BROKER`,
-   `DEVICE_ID`, pin numbers, and `NUM_PIXELS`.
+   `DEVICE_ID`, pin numbers, `NUM_PIXELS_PHYSICAL`, and `VISIBLE_PIXEL_MAP`.
 3. Push the firmware to the device with [`mpremote`](https://docs.micropython.org/en/latest/reference/mpremote.html)
    (or Thonny):
 
@@ -132,9 +132,12 @@ other. Just never feed external 5V into the VBUS pin itself.
 ```
 
 Both `display` and `leds` are optional per message. `leds` is applied by
-array position (index 0 = first pixel in the chain); pixels beyond the
-array length are left unchanged, entries beyond the configured
-`NUM_PIXELS` are ignored.
+array position over a *logical* pixel numbering (index 0 = first
+externally-visible pixel) -- `firmware/config.py`'s `VISIBLE_PIXEL_MAP`
+maps each logical index to its physical position in the chain, so pixels
+that are wired but hidden behind the panel are skipped entirely and MQTT
+consumers never need to know they exist. Pixels beyond the array length
+are left unchanged, entries beyond the logical pixel count are ignored.
 
 `transitionDuration` (seconds, fractional allowed) and `transitionType`
 apply to the `leds` update in that same message — one setting per message,

@@ -14,7 +14,7 @@ WIFI_CONNECT_TIMEOUT_MS = 15000
 WIFI_POLL_MS = 250
 MQTT_RETRY_MS = 3000
 
-BOOT_FLASH_COLOR = {"r": 0, "g": 255, "b": 0}
+BOOT_FLASH_COLOR = (0, 255, 0)
 BOOT_FLASH_COUNT = 3
 BOOT_FLASH_ON_MS = 150
 BOOT_FLASH_OFF_MS = 150
@@ -37,12 +37,14 @@ IDLE_PATTERN_STEP_MS = 350
 
 
 def boot_flash(leds):
-    on = [BOOT_FLASH_COLOR] * leds.num_pixels
-    off = [{"r": 0, "g": 0, "b": 0}] * leds.num_pixels
+    """Self-test: flashes every physical pixel, including the ones hidden
+    behind the panel -- unlike apply(), which only ever touches the
+    externally-visible logical subset.
+    """
     for _ in range(BOOT_FLASH_COUNT):
-        leds.apply(on)
+        leds.set_all_physical(BOOT_FLASH_COLOR)
         time.sleep_ms(BOOT_FLASH_ON_MS)
-        leds.apply(off)
+        leds.set_all_physical((0, 0, 0))
         time.sleep_ms(BOOT_FLASH_OFF_MS)
 
 
@@ -89,7 +91,7 @@ def main():
     display = DisplayController(oled)
 
     time.sleep_ms(BOOT_SETTLE_MS)
-    leds = LedController(machine.Pin(config.NEOPIXEL_PIN), config.NUM_PIXELS)
+    leds = LedController(machine.Pin(config.NEOPIXEL_PIN), config.NUM_PIXELS_PHYSICAL, config.VISIBLE_PIXEL_MAP)
 
     # Visible proof-of-life before anything touches the network: a quick
     # green flash on the LEDs, then live status text on the OLED.
