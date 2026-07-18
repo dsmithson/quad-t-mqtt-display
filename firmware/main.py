@@ -19,6 +19,22 @@ BOOT_FLASH_COUNT = 3
 BOOT_FLASH_ON_MS = 150
 BOOT_FLASH_OFF_MS = 150
 
+# Gives the external 5V rail (and its bulk cap) time to settle before the
+# first NeoPixel write -- writing while the rail is still ramping up right
+# after power-on is a plausible cause of a boot flash that only "takes"
+# sometimes.
+BOOT_SETTLE_MS = 300
+
+# One-time red/green/blue cycle once MQTT is up, a quick "still waiting for
+# a real command" proof-of-life without being a perpetual, annoying blink.
+IDLE_PATTERN_COLORS = (
+    {"r": 255, "g": 0, "b": 0},
+    {"r": 0, "g": 255, "b": 0},
+    {"r": 0, "g": 0, "b": 255},
+    {"r": 0, "g": 0, "b": 0},
+)
+IDLE_PATTERN_STEP_MS = 350
+
 
 def boot_flash(leds):
     on = [BOOT_FLASH_COLOR] * leds.num_pixels
@@ -71,6 +87,8 @@ def make_oled():
 def main():
     oled = make_oled()
     display = DisplayController(oled)
+
+    time.sleep_ms(BOOT_SETTLE_MS)
     leds = LedController(machine.Pin(config.NEOPIXEL_PIN), config.NUM_PIXELS)
 
     # Visible proof-of-life before anything touches the network: a quick
@@ -79,16 +97,26 @@ def main():
     connect_wifi(display)
     display.apply({"drawMode": "text1Line", "textLine1": "MQTT connecting"})
 
+    waiting_for_first_command = True
+    idle_pattern_index = 0
+    idle_pattern_last_ms = time.ticks_ms()
+
     def on_command(payload):
+        nonlocal waiting_for_first_command
+        waiting_for_first_command = False
         if "display" in payload:
             display.apply(payload["display"])
         if "leds" in payload:
-            leds.apply(payload["leds"])
+            leds.apply(
+                payload["leds"],
+                transition_duration=payload.get("transitionDuration", 0),
+                transition_type=payload.get("transitionType", "immediate"),
+            )
         mqtt.publish_state({"display": display.as_state(), "leds": leds.as_state()})
 
     mqtt = DeviceMqtt(config, on_command)
     mqtt.connect()
-    display.apply({"drawMode": "text1Line", "textLine1": "Ready"})
+    display.apply({"drawMode": "text2Line", "textLine1": "MQTT Connected", "textLine2": "Waiting..."})
     mqtt.publish_state({"display": display.as_state(), "leds": leds.as_state()})
 
     while True:
@@ -97,6 +125,14 @@ def main():
                 raise OSError("wifi dropped")
             mqtt.check_msg()
             display.tick(time.ticks_ms())
+            if leds.tick(time.ticks_ms()) and not waiting_for_first_command:
+                mqtt.publish_state({"display": display.as_state(), "leds": leds.as_state()})
+            if waiting_for_first_command and idle_pattern_index < len(IDLE_PATTERN_COLORS):
+                now = time.ticks_ms()
+                if time.ticks_diff(now, idle_pattern_last_ms) >= IDLE_PATTERN_STEP_MS:
+                    leds.apply([IDLE_PATTERN_COLORS[idle_pattern_index]] * leds.num_pixels)
+                    idle_pattern_index += 1
+                    idle_pattern_last_ms = now
             time.sleep_ms(TICK_MS)
         except OSError as exc:
             print("main: connection error, reconnecting:", exc)
@@ -105,7 +141,9 @@ def main():
             time.sleep_ms(MQTT_RETRY_MS)
             connect_wifi(display)
             mqtt.connect()
-            display.apply({"drawMode": "text1Line", "textLine1": "Ready"})
+            display.apply(
+                {"drawMode": "text2Line", "textLine1": "MQTT Connected", "textLine2": "Waiting..."}
+            )
             mqtt.publish_state({"display": display.as_state(), "leds": leds.as_state()})
 
 

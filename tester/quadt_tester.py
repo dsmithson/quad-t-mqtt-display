@@ -7,8 +7,10 @@ watch the device's state/status topics to confirm what it applied.
 Examples:
   quadt_tester.py text --line1 "Hello world"
   quadt_tester.py text --line1 "A very long line that needs to scroll" --autoscroll
+  quadt_tester.py text --line1 "Ready" --burn-in-mode bounce --burn-in-interval 10
   quadt_tester.py leds --color 255,0,0
   quadt_tester.py leds --colors 255,0,0 0,255,0 0,0,255
+  quadt_tester.py leds --color 0,255,0 --transition-duration 2 --transition-type smooth
   quadt_tester.py pixels --file frame.bin
   quadt_tester.py raw --file payload.json
   quadt_tester.py watch
@@ -58,8 +60,10 @@ def cmd_text(args):
     }
     if args.line2:
         display["textLine2"] = args.line2
-    if args.invert_rate is not None:
-        display["invertRate"] = args.invert_rate
+    if args.burn_in_interval is not None:
+        display["oledBurnInProtectionInterval"] = args.burn_in_interval
+    if args.burn_in_mode is not None:
+        display["oledBurnInProtectionMode"] = args.burn_in_mode
     publish(args, {"display": display})
 
 
@@ -75,8 +79,10 @@ def cmd_pixels(args):
         )
     hex_data = binascii.hexlify(raw).decode("ascii")
     display = {"drawMode": "pixels", "pixelData": hex_data}
-    if args.invert_rate is not None:
-        display["invertRate"] = args.invert_rate
+    if args.burn_in_interval is not None:
+        display["oledBurnInProtectionInterval"] = args.burn_in_interval
+    if args.burn_in_mode is not None:
+        display["oledBurnInProtectionMode"] = args.burn_in_mode
     publish(args, {"display": display})
 
 
@@ -95,7 +101,12 @@ def cmd_leds(args):
         leds = [_parse_color(c) for c in args.colors]
     else:
         raise SystemExit("specify --color or --colors")
-    publish(args, {"leds": leds})
+    payload = {"leds": leds}
+    if args.transition_duration is not None:
+        payload["transitionDuration"] = args.transition_duration
+    if args.transition_type is not None:
+        payload["transitionType"] = args.transition_type
+    publish(args, payload)
 
 
 def cmd_raw(args):
@@ -137,20 +148,33 @@ def build_parser():
     p_text.add_argument("--line1", default="", help="first line of text")
     p_text.add_argument("--line2", default="", help="second line of text (switches to text2Line mode)")
     p_text.add_argument("--autoscroll", action="store_true", help="scroll lines wider than the screen")
-    p_text.add_argument("--invert-rate", type=int, default=None, help="seconds between invert toggles (burn-in mitigation)")
+    p_text.add_argument(
+        "--burn-in-interval", type=int, default=None,
+        help="seconds between burn-in mitigation actions, capped at 30 by the device (default: %(default)s)",
+    )
+    p_text.add_argument(
+        "--burn-in-mode", choices=("invertDisplay", "bounce"), default=None,
+        help="burn-in mitigation strategy (default: device keeps its current mode)",
+    )
     p_text.set_defaults(func=cmd_text)
 
     p_pixels = sub.add_parser("pixels", help="push a raw 1bpp framebuffer")
     p_pixels.add_argument("--file", required=True, help="path to raw binary framebuffer (128x32/8 = 512 bytes)")
     p_pixels.add_argument("--width", type=int, default=128)
     p_pixels.add_argument("--height", type=int, default=32)
-    p_pixels.add_argument("--invert-rate", type=int, default=None)
+    p_pixels.add_argument("--burn-in-interval", type=int, default=None)
+    p_pixels.add_argument("--burn-in-mode", choices=("invertDisplay", "bounce"), default=None)
     p_pixels.set_defaults(func=cmd_pixels)
 
     p_leds = sub.add_parser("leds", help="set NeoPixel colors")
     p_leds.add_argument("--color", help="apply one r,g,b color to --count pixels")
     p_leds.add_argument("--count", type=int, default=11, help="pixel count when using --color (default: %(default)s)")
     p_leds.add_argument("--colors", nargs="+", help="one r,g,b per pixel, e.g. --colors 255,0,0 0,255,0")
+    p_leds.add_argument("--transition-duration", type=float, default=None, help="seconds to transition over (default: immediate)")
+    p_leds.add_argument(
+        "--transition-type", choices=("immediate", "smooth", "thruBlack"), default=None,
+        help="how to transition (default: immediate)",
+    )
     p_leds.set_defaults(func=cmd_leds)
 
     p_raw = sub.add_parser("raw", help="publish a raw JSON file as-is")

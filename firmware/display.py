@@ -10,12 +10,22 @@ FONT_H = 8
 SCROLL_STEP_PX = 2
 SCROLL_GAP_PX = 32
 
+# Burn-in mitigation: whatever the incoming message asks for, never let the
+# interval exceed this, and always fall back to it when unset. A "real"
+# front panel firmware this was salvaged from used roughly this cadence.
+MAX_BURN_IN_INTERVAL_S = 30
+DEFAULT_BURN_IN_MODE = "invertDisplay"
+
+BOUNCE_STEP_PX = 1
+BOUNCE_RANGE_X = 8
+BOUNCE_RANGE_Y = 5
+
 
 class DisplayController:
     """Wraps an ssd1306.SSD1306_SPI and applies the display section of the
-    MQTT command JSON: drawMode (pixels/text1Line/text2Line), invertRate
-    (burn-in mitigation), pixelData (raw 1bpp framebuffer), and scrolling
-    text.
+    MQTT command JSON: drawMode (pixels/text1Line/text2Line),
+    oledBurnInProtectionInterval/oledBurnInProtectionMode (burn-in
+    mitigation), pixelData (raw 1bpp framebuffer), and scrolling text.
     """
 
     def __init__(self, oled):
@@ -24,15 +34,20 @@ class DisplayController:
         self.height = oled.height
 
         self.draw_mode = "text1Line"
-        self.invert_rate = 0
+        self.burn_in_interval_s = MAX_BURN_IN_INTERVAL_S
+        self.burn_in_mode = DEFAULT_BURN_IN_MODE
         self.pixel_data_hex = ""
         self.line1 = ""
         self.line2 = ""
         self.autoscroll = False
 
         self._invert_state = False
-        self._last_invert_ms = time.ticks_ms()
+        self._last_burn_in_ms = time.ticks_ms()
         self._scroll_x = {1: 0, 2: 0}
+        self._bounce_x = 0
+        self._bounce_y = 0
+        self._bounce_dx = BOUNCE_STEP_PX
+        self._bounce_dy = BOUNCE_STEP_PX
 
         self.render()
 
@@ -42,7 +57,11 @@ class DisplayController:
         whatever was last set.
         """
         self.draw_mode = cfg.get("drawMode", self.draw_mode)
-        self.invert_rate = cfg.get("invertRate", self.invert_rate)
+        interval = cfg.get("oledBurnInProtectionInterval", self.burn_in_interval_s)
+        if not interval or interval > MAX_BURN_IN_INTERVAL_S:
+            interval = MAX_BURN_IN_INTERVAL_S
+        self.burn_in_interval_s = interval
+        self.burn_in_mode = cfg.get("oledBurnInProtectionMode", self.burn_in_mode)
         self.pixel_data_hex = cfg.get("pixelData", self.pixel_data_hex)
         self.line1 = cfg.get("textLine1", self.line1)
         self.line2 = cfg.get("textLine2", self.line2)
@@ -53,7 +72,8 @@ class DisplayController:
     def as_state(self):
         return {
             "drawMode": self.draw_mode,
-            "invertRate": self.invert_rate,
+            "oledBurnInProtectionInterval": self.burn_in_interval_s,
+            "oledBurnInProtectionMode": self.burn_in_mode,
             "textLine1": self.line1,
             "textLine2": self.line2,
             "textAutoScroll": self.autoscroll,
@@ -62,12 +82,15 @@ class DisplayController:
     def tick(self, now_ms):
         changed = False
 
-        if self.invert_rate:
-            elapsed = time.ticks_diff(now_ms, self._last_invert_ms)
-            if elapsed >= self.invert_rate * 1000:
+        elapsed = time.ticks_diff(now_ms, self._last_burn_in_ms)
+        if elapsed >= self.burn_in_interval_s * 1000:
+            if self.burn_in_mode == "bounce":
+                self._advance_bounce()
+                changed = True
+            else:
                 self._invert_state = not self._invert_state
                 self.oled.invert(self._invert_state)
-                self._last_invert_ms = now_ms
+            self._last_burn_in_ms = now_ms
 
         if self.autoscroll and self.draw_mode in ("text1Line", "text2Line"):
             for line_no in self._active_line_numbers():
@@ -78,6 +101,16 @@ class DisplayController:
 
         if changed:
             self.render()
+
+    def _advance_bounce(self):
+        self._bounce_x += self._bounce_dx
+        if self._bounce_x <= -BOUNCE_RANGE_X or self._bounce_x >= BOUNCE_RANGE_X:
+            self._bounce_dx = -self._bounce_dx
+            self._bounce_x = max(-BOUNCE_RANGE_X, min(self._bounce_x, BOUNCE_RANGE_X))
+        self._bounce_y += self._bounce_dy
+        if self._bounce_y <= -BOUNCE_RANGE_Y or self._bounce_y >= BOUNCE_RANGE_Y:
+            self._bounce_dy = -self._bounce_dy
+            self._bounce_y = max(-BOUNCE_RANGE_Y, min(self._bounce_y, BOUNCE_RANGE_Y))
 
     def _active_line_numbers(self):
         if self.draw_mode == "text1Line":
@@ -112,13 +145,16 @@ class DisplayController:
             oled.show()
             return
 
+        bx = self._bounce_x if self.burn_in_mode == "bounce" else 0
+        by = self._bounce_y if self.burn_in_mode == "bounce" else 0
+
         oled.fill(0)
         if self.draw_mode == "text1Line":
             y = (self.height - FONT_H) // 2
-            oled.text(self.line1, self._line_x(1, self.line1), y)
+            oled.text(self.line1, self._line_x(1, self.line1) + bx, y + by)
         elif self.draw_mode == "text2Line":
             y1 = max(0, self.height // 4 - FONT_H // 2)
             y2 = self.height - y1 - FONT_H
-            oled.text(self.line1, self._line_x(1, self.line1), y1)
-            oled.text(self.line2, self._line_x(2, self.line2), y2)
+            oled.text(self.line1, self._line_x(1, self.line1) + bx, y1 + by)
+            oled.text(self.line2, self._line_x(2, self.line2) + bx, y2 + by)
         oled.show()

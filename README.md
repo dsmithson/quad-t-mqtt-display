@@ -115,7 +115,8 @@ other. Just never feed external 5V into the VBUS pin itself.
 {
   "display": {
     "drawMode": "pixels | text1Line | text2Line",
-    "invertRate": 5,
+    "oledBurnInProtectionInterval": 30,
+    "oledBurnInProtectionMode": "invertDisplay | bounce",
     "pixelData": "<1024 hex chars = 512 bytes, 128x32 1bpp framebuffer>",
     "textLine1": "My Custom Text",
     "textLine2": "Other custom text",
@@ -124,7 +125,9 @@ other. Just never feed external 5V into the VBUS pin itself.
   "leds": [
     { "r": 255, "g": 0, "b": 0 },
     { "r": 0, "g": 255, "b": 0 }
-  ]
+  ],
+  "transitionDuration": 2.5,
+  "transitionType": "immediate | smooth | thruBlack"
 }
 ```
 
@@ -132,6 +135,21 @@ Both `display` and `leds` are optional per message. `leds` is applied by
 array position (index 0 = first pixel in the chain); pixels beyond the
 array length are left unchanged, entries beyond the configured
 `NUM_PIXELS` are ignored.
+
+`transitionDuration` (seconds, fractional allowed) and `transitionType`
+apply to the `leds` update in that same message — one setting per message,
+not per pixel. `immediate` (the default) sets colors instantly; `smooth`
+linearly blends from each pixel's current color to its target over the
+duration; `thruBlack` blends down to off then back up to the target,
+split evenly across the duration. A pixel already at its target color is
+left alone regardless of these settings.
+
+`oledBurnInProtectionInterval` is seconds between burn-in mitigation
+actions; the device always clamps it to 30s max (and defaults to 30s if
+omitted) — a value can be *lower* than 30 but never higher.
+`oledBurnInProtectionMode` picks the strategy: `invertDisplay` (default)
+periodically inverts the whole screen; `bounce` nudges the text position
+around the screen a pixel at a time, DVD-logo style.
 
 ## Tester CLI
 
@@ -141,8 +159,10 @@ pip install -r requirements.txt
 
 python quadt_tester.py text --line1 "Hello world"
 python quadt_tester.py text --line1 "A long line that needs to scroll across the screen" --autoscroll
+python quadt_tester.py text --line1 "Ready" --burn-in-mode bounce --burn-in-interval 10
 python quadt_tester.py leds --color 255,0,0
 python quadt_tester.py leds --colors 255,0,0 0,255,0 0,0,255
+python quadt_tester.py leds --color 0,255,0 --transition-duration 2 --transition-type smooth
 python quadt_tester.py pixels --file frame.bin
 python quadt_tester.py raw --file payload.json
 python quadt_tester.py watch
