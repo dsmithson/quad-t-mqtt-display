@@ -90,8 +90,17 @@ def main():
     oled = make_oled()
     display = DisplayController(oled)
 
-    time.sleep_ms(BOOT_SETTLE_MS)
+    # Claim the NeoPixel data pin as early as possible: constructing
+    # LedController hands GPIO15 to the PIO state machine, which drives it
+    # to a defined low level immediately, even before the first real
+    # write(). Left unclaimed, the pin floats while the 5V rail is already
+    # live, and stray noise on it can get latched in by the first few
+    # pixels as garbage color data right at power-on -- only *then* do we
+    # wait out BOOT_SETTLE_MS, so the rail has time to stabilize before
+    # the first real (colorful) write, without leaving the line floating
+    # in the meantime.
     leds = LedController(machine.Pin(config.NEOPIXEL_PIN), config.NUM_PIXELS_PHYSICAL, config.VISIBLE_PIXEL_MAP)
+    time.sleep_ms(BOOT_SETTLE_MS)
 
     # Visible proof-of-life before anything touches the network: a quick
     # green flash on the LEDs, then live status text on the OLED.
