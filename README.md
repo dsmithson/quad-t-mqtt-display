@@ -1,12 +1,17 @@
 # Quad-T Front Panel Lights
 
 Salvaged Christie Quad-T video encoder front panel — a 128x32 Adafruit
-SSD1306 SPI OLED (product #661) plus a NeoPixel PCB (4 exposed pixels,
-possibly 8 on-board) extended with a 7-pixel NeoPixel Jewel — driven by a
-Raspberry Pi Pico W over MQTT.
+SSD1306 SPI OLED (product #661) plus a NeoPixel board (8 pixels, 4 visible
+through the panel) extended with a 7-pixel NeoPixel Jewel in the center —
+driven by a Raspberry Pi Pico W over MQTT.
 
 Send a JSON payload to `quadTFrontPanel/<device-id>/set` to control the
 display text/pixels and NeoPixel colors from any MQTT-capable service.
+
+**Status:** hardware bring-up is complete and working end-to-end — OLED,
+all 11 externally-addressable NeoPixels, WiFi/MQTT reconnect handling,
+color transitions, and OLED burn-in mitigation. Next up: a proper client
+app/service to actually drive this thing with real data.
 
 ## Repo layout
 
@@ -47,9 +52,19 @@ tester/            Python CLI to publish test payloads from a dev machine
 | GND | shared GND rail (see Power below) | — |
 
 Daisy-chain the existing strip's data-out/5V/GND straight into the Jewel's
-data-in/5V/GND when it arrives. A ~1000uF capacitor across 5V/GND at the
-first pixel and a ~300-500 ohm resistor in series on the data line are
-cheap insurance against the 3.3V-logic-on-5V-LED marginal voltage issue.
+data-in/5V/GND. A ~220uF (or larger) capacitor across 5V/GND at the first
+pixel helps absorb power-on inrush and switching noise.
+
+**3.3V-logic-on-5V-LED voltage margin:** the Pico's 3.3V GPIO is below the
+WS2812's nominal logic-high threshold at a true 5V rail, which showed up
+here as pixels that received data (visible on a scope) but didn't
+reliably light. The fix that actually worked: **two silicon diodes in
+series in the LED +5V feed** (not the data line), dropping the rail to
+roughly 4.2-4.4V and giving the 3.3V signal real margin. A single diode's
+~0.6-0.7V drop wasn't quite enough — diode forward voltage drops further
+at low currents, and this chain spends most of its time idle/dim. If your
+supply runs high (measure it — cheap USB chargers often read 5.5V+ under
+light load) you may need the same fix.
 
 Pin numbers live in `firmware/config.py` if you need to wire it differently.
 
