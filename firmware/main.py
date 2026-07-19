@@ -112,23 +112,30 @@ def main():
     idle_pattern_index = 0
     idle_pattern_last_ms = time.ticks_ms()
 
+    def publish_full_state():
+        mqtt.publish_state(
+            {"display": display.as_state(), "leds": leds.as_state(), "pixelBrightness": leds.brightness}
+        )
+
     def on_command(payload):
         nonlocal waiting_for_first_command
         waiting_for_first_command = False
         if "display" in payload:
             display.apply(payload["display"])
+        if "pixelBrightness" in payload:
+            leds.set_brightness(payload["pixelBrightness"])
         if "leds" in payload:
             leds.apply(
                 payload["leds"],
                 transition_duration=payload.get("transitionDuration", 0),
                 transition_type=payload.get("transitionType", "immediate"),
             )
-        mqtt.publish_state({"display": display.as_state(), "leds": leds.as_state()})
+        publish_full_state()
 
     mqtt = DeviceMqtt(config, on_command)
     mqtt.connect()
     display.apply({"drawMode": "text2Line", "textLine1": "MQTT Connected", "textLine2": "Waiting..."})
-    mqtt.publish_state({"display": display.as_state(), "leds": leds.as_state()})
+    publish_full_state()
 
     while True:
         try:
@@ -137,7 +144,7 @@ def main():
             mqtt.check_msg()
             display.tick(time.ticks_ms())
             if leds.tick(time.ticks_ms()) and not waiting_for_first_command:
-                mqtt.publish_state({"display": display.as_state(), "leds": leds.as_state()})
+                publish_full_state()
             if waiting_for_first_command and idle_pattern_index < len(IDLE_PATTERN_COLORS):
                 now = time.ticks_ms()
                 if time.ticks_diff(now, idle_pattern_last_ms) >= IDLE_PATTERN_STEP_MS:
@@ -155,7 +162,7 @@ def main():
             display.apply(
                 {"drawMode": "text2Line", "textLine1": "MQTT Connected", "textLine2": "Waiting..."}
             )
-            mqtt.publish_state({"display": display.as_state(), "leds": leds.as_state()})
+            publish_full_state()
 
 
 if __name__ == "__main__":

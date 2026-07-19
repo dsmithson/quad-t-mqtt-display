@@ -139,10 +139,11 @@ other. Just never feed external 5V into the VBUS pin itself.
   },
   "leds": [
     { "r": 255, "g": 0, "b": 0 },
-    { "r": 0, "g": 255, "b": 0 }
+    { "r": 0, "g": 255, "b": 0, "displayMode": "blinkThruBlack", "blinkDuration": 0.75 }
   ],
   "transitionDuration": 2.5,
-  "transitionType": "immediate | smooth | thruBlack"
+  "transitionType": "immediate | smooth | thruBlack",
+  "pixelBrightness": 1.0
 }
 ```
 
@@ -154,13 +155,35 @@ that are wired but hidden behind the panel are skipped entirely and MQTT
 consumers never need to know they exist. Pixels beyond the array length
 are left unchanged, entries beyond the logical pixel count are ignored.
 
+Each `leds` entry's `displayMode` is `solid` (default), `blink` (hard
+on/off), or `blinkThruBlack` (fades to black and back, prettier and less
+jarring -- good for "this build is currently running" indicators).
+`blinkDuration` (seconds, fractional allowed, e.g. `0.5`) is the length of
+*each leg* of the cycle -- on-hold/off-hold for `blink`, fade-down/fade-up
+for `blinkThruBlack` -- so a full round trip takes `2 x blinkDuration`.
+If a new color/mode arrives for a pixel while it's mid-fade-down, the
+fade-down finishes at its already-established rate rather than snapping,
+and the new color/duration only takes over once it reaches black -- avoids
+a jarring cut mid-fade if you're updating colors faster than the blink
+cycle.
+
 `transitionDuration` (seconds, fractional allowed) and `transitionType`
-apply to the `leds` update in that same message — one setting per message,
-not per pixel. `immediate` (the default) sets colors instantly; `smooth`
+apply to `solid` pixels in that same message's `leds` update — one setting
+per message, not per pixel (blinking pixels use their own `blinkDuration`
+instead). `immediate` (the default) sets colors instantly; `smooth`
 linearly blends from each pixel's current color to its target over the
 duration; `thruBlack` blends down to off then back up to the target,
 split evenly across the duration. A pixel already at its target color is
 left alone regardless of these settings.
+
+`pixelBrightness` (0.0-1.0, default 1.0) scales every LED's r/g/b equally
+at the point of writing to hardware -- a simple linear multiply, the same
+approach Adafruit's own NeoPixel library uses, chosen because scaling all
+three channels by the same factor preserves hue/color balance while
+dimming (a different curve per channel would shift the perceived color).
+It's independent of `leds` -- send it alone to just dim/brighten without
+touching any colors. The retained `state` topic always reports each
+pixel's original, unscaled color regardless of the current brightness.
 
 `oledBurnInProtectionInterval` is seconds between burn-in mitigation
 actions; the device always clamps it to 30s max (and defaults to 30s if
@@ -181,6 +204,8 @@ python quadt_tester.py text --line1 "Ready" --burn-in-mode bounce --burn-in-inte
 python quadt_tester.py leds --color 255,0,0
 python quadt_tester.py leds --colors 255,0,0 0,255,0 0,0,255
 python quadt_tester.py leds --color 0,255,0 --transition-duration 2 --transition-type smooth
+python quadt_tester.py leds --color 255,0,0 --display-mode blinkThruBlack --blink-duration 0.75
+python quadt_tester.py brightness 0.3
 python quadt_tester.py pixels --file frame.bin
 python quadt_tester.py raw --file payload.json
 python quadt_tester.py watch

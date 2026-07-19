@@ -11,6 +11,8 @@ Examples:
   quadt_tester.py leds --color 255,0,0
   quadt_tester.py leds --colors 255,0,0 0,255,0 0,0,255
   quadt_tester.py leds --color 0,255,0 --transition-duration 2 --transition-type smooth
+  quadt_tester.py leds --color 255,0,0 --display-mode blinkThruBlack --blink-duration 0.75
+  quadt_tester.py brightness 0.3
   quadt_tester.py pixels --file frame.bin
   quadt_tester.py raw --file payload.json
   quadt_tester.py watch
@@ -86,19 +88,24 @@ def cmd_pixels(args):
     publish(args, {"display": display})
 
 
-def _parse_color(s):
+def _parse_color(s, display_mode=None, blink_duration=None):
     parts = [int(x) for x in s.split(",")]
     if len(parts) != 3:
         raise argparse.ArgumentTypeError("expected r,g,b e.g. 255,0,0")
     r, g, b = parts
-    return {"r": r, "g": g, "b": b}
+    entry = {"r": r, "g": g, "b": b}
+    if display_mode is not None:
+        entry["displayMode"] = display_mode
+    if display_mode in ("blink", "blinkThruBlack") and blink_duration is not None:
+        entry["blinkDuration"] = blink_duration
+    return entry
 
 
 def cmd_leds(args):
     if args.color:
-        leds = [_parse_color(args.color)] * args.count
+        leds = [_parse_color(args.color, args.display_mode, args.blink_duration)] * args.count
     elif args.colors:
-        leds = [_parse_color(c) for c in args.colors]
+        leds = [_parse_color(c, args.display_mode, args.blink_duration) for c in args.colors]
     else:
         raise SystemExit("specify --color or --colors")
     payload = {"leds": leds}
@@ -107,6 +114,10 @@ def cmd_leds(args):
     if args.transition_type is not None:
         payload["transitionType"] = args.transition_type
     publish(args, payload)
+
+
+def cmd_brightness(args):
+    publish(args, {"pixelBrightness": args.value})
 
 
 def cmd_raw(args):
@@ -175,7 +186,19 @@ def build_parser():
         "--transition-type", choices=("immediate", "smooth", "thruBlack"), default=None,
         help="how to transition (default: immediate)",
     )
+    p_leds.add_argument(
+        "--display-mode", choices=("solid", "blink", "blinkThruBlack"), default=None,
+        help="applied to every pixel in this command (default: solid)",
+    )
+    p_leds.add_argument(
+        "--blink-duration", type=float, default=None,
+        help="seconds per blink leg (on/off or fade-down/fade-up), only used with --display-mode blink/blinkThruBlack",
+    )
     p_leds.set_defaults(func=cmd_leds)
+
+    p_brightness = sub.add_parser("brightness", help="set global NeoPixel brightness")
+    p_brightness.add_argument("value", type=float, help="0.0 (off) to 1.0 (full, default)")
+    p_brightness.set_defaults(func=cmd_brightness)
 
     p_raw = sub.add_parser("raw", help="publish a raw JSON file as-is")
     p_raw.add_argument("--file", required=True, help="path to a JSON payload file")

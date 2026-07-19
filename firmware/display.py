@@ -20,6 +20,17 @@ BOUNCE_STEP_PX = 1
 BOUNCE_RANGE_X = 8
 BOUNCE_RANGE_Y = 5
 
+# Self-heal: periodically re-send the full SSD1306 init sequence and
+# redraw, regardless of whether anything changed. A glitch (electrical
+# noise, a marginal connection, a brownout) can corrupt the controller's
+# internal state -- lost display RAM, or a stray command that leaves it
+# powered off -- without it ever raising a Python-visible error, since SPI
+# writes don't fail loudly. This bounds how long the screen can stay dark
+# from that kind of transient to one interval instead of forever. It's not
+# a fix for a genuinely loose/broken physical connection, just a bound on
+# how long a transient glitch can leave the screen dark.
+OLED_REINIT_INTERVAL_MS = 15000
+
 
 class DisplayController:
     """Wraps an ssd1306.SSD1306_SPI and applies the display section of the
@@ -43,6 +54,7 @@ class DisplayController:
 
         self._invert_state = False
         self._last_burn_in_ms = time.ticks_ms()
+        self._last_reinit_ms = time.ticks_ms()
         self._scroll_x = {1: 0, 2: 0}
         self._bounce_x = 0
         self._bounce_y = 0
@@ -81,6 +93,12 @@ class DisplayController:
 
     def tick(self, now_ms):
         changed = False
+
+        if time.ticks_diff(now_ms, self._last_reinit_ms) >= OLED_REINIT_INTERVAL_MS:
+            self.oled.init_display()
+            self.oled.invert(self._invert_state)
+            self._last_reinit_ms = now_ms
+            changed = True
 
         elapsed = time.ticks_diff(now_ms, self._last_burn_in_ms)
         if elapsed >= self.burn_in_interval_s * 1000:

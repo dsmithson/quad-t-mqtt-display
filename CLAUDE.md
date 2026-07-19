@@ -46,13 +46,46 @@ worth not rediscovering each session.
   over time (`transitionDuration`/`transitionType` in the MQTT payload)
   without blocking the main loop -- `tick()` advances any in-flight
   animations and must be called every iteration. It returns `True` the
-  instant a transition finishes, which `main.py` uses to re-publish the
-  retained `state` topic (state otherwise only reflects the color at the
-  moment the command arrived, not where it ended up).
+  instant a one-shot transition finishes, which `main.py` uses to
+  re-publish the retained `state` topic (state otherwise only reflects
+  the color at the moment the command arrived, not where it ended up).
+  Perpetual blinking (below) never triggers that republish on its own --
+  that would spam the retained topic forever.
+- **Perpetual per-pixel blinking** (`displayMode: blink`/`blinkThruBlack`)
+  is a *separate* animation system from the one-shot transitions above --
+  `_BlinkState` in `leds.py`, tracked in `LedController._blinks` (keyed by
+  physical index, same as `_animations`; a pixel is in at most one of the
+  two). It models a cycle as two "legs" (descending toward black,
+  ascending back to the target), each `blinkDuration` seconds. If a new
+  command retargets a pixel while its descending leg is in flight, the
+  redirect is stashed in `_BlinkState.pending` rather than applied
+  immediately -- the descent finishes at its already-established rate,
+  and the redirect only takes effect the instant it reaches black. Do not
+  "simplify" this by applying new blink targets immediately; that's the
+  specific jarring behavior it was built to avoid. `as_state()`
+  deliberately reports the *stable target* color (`on_color`, or
+  `pending`'s target if a redirect is queued), never the live
+  instantaneous value -- the latter is just noise in a retained topic
+  since it depends on exactly when it's read.
+- **`pixelBrightness`** is a simple linear scale applied to every channel
+  equally, only at the point `_show()` writes to hardware -- `self.colors`
+  and `as_state()` always hold/report the original unscaled values. Keep
+  it that way; scaling storage in place would make brightness changes
+  lossy and complicate every other piece of pixel-state logic.
 - **OLED burn-in mitigation.** `DisplayController.tick()` handles both
   strategies (`invertDisplay` and `bounce`) on the same
   `oledBurnInProtectionInterval` timer, which is always clamped to 30s
   max regardless of what a message requests.
+- **OLED periodic self-heal.** `DisplayController.tick()` also
+  unconditionally re-sends the full SSD1306 init sequence + redraw every
+  `OLED_REINIT_INTERVAL_MS` (15s), regardless of whether anything visibly
+  changed. This exists because SPI writes don't fail loudly -- a
+  transient glitch (noise, a marginal connection, a brownout) can corrupt
+  the controller's internal state without ever raising a Python
+  exception, leaving the screen dark or blank until *something* resends
+  a full init. This bounds that outage to one interval instead of
+  forever; it is not a fix for a genuinely loose/broken physical
+  connection, which still needs to be checked by hand.
 
 ## Known gotchas (all found the hard way on real hardware -- don't
 ## re-derive these, they cost real debugging time the first time around)
