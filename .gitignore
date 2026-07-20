@@ -5,6 +5,10 @@ __pycache__/
 .venv/
 venv/
 
+# Go build output (azureBuildMonitor)
+azureBuildMonitor/azureBuildMonitor
+azureBuildMonitor/azureBuildMonitor.exe
+
 .DS_Store
 Thumbs.db
 

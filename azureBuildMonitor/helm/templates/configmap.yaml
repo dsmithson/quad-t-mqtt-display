@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "azurebuildmonitor.fullname" . }}-cfg
+  labels: {{- include "azurebuildmonitor.labels" . | nindent 4 }}
+data:
+  AZURE_DEVOPS_URL: "{{ .Values.azureDevOps.url }}"
+  AZURE_DEVOPS_PROJECT_NAME: "{{ .Values.azureDevOps.projectName }}"
+  AZURE_DEVOPS_BUILD_DEFINITION_IDS: "{{ .Values.azureDevOps.buildDefinitionIds | join "," }}"
+  FULL_REFRESH_INTERVAL_SECONDS: "{{ .Values.fullRefreshIntervalSeconds }}"
+  PIPELINE_MESSAGE_DURATION_SECONDS: "{{ .Values.pipelineMessageDurationSeconds }}"
+  MQTT_SERVER_URL: "{{ .Values.mqtt.serverUrl }}"
+  MQTT_SERVER_PORT: "{{ .Values.mqtt.serverPort }}"
+  BUILD_EVENT_TOPIC: "{{ .Values.mqtt.buildEventTopic }}"
+  QUADT_DEVICE_NAME: "{{ .Values.quadT.deviceName }}"
+  QUADT_BRIGHTNESS: "{{ .Values.quadT.brightness }}"
+  QUADT_DIM_PIXEL_MULTIPLIER: "{{ .Values.quadT.dimPixelMultiplier }}"

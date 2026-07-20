@@ -1,0 +1,6 @@
+apiVersion: v2
+name: azurebuildmonitor
+description: Polls Azure DevOps build status and drives the Quad-T MQTT front panel
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

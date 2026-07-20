@@ -1,0 +1,57 @@
+image:
+  repository: dsmithson/custom-build-monitor
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+azureDevOps:
+  url: "https://dev.azure.com/your-org"
+  projectName: "YourProject"
+  # One hexagon pixel per ID, in this order -- max 7 (the Quad-T panel's
+  # hexagon only has 7 pixels). Find these in each pipeline's URL:
+  # _build?definitionId=<id>.
+  buildDefinitionIds: [1, 2, 3, 4, 5, 6, 7]
+  # The PAT itself is never set here -- create it out of band with:
+  #   kubectl create secret generic azure-devops-pat -n buildMonitor \
+  #     --from-literal=AZURE_DEVOPS_PAT=<token>
+  existingSecret: "azure-devops-pat"
+  existingSecretKey: "AZURE_DEVOPS_PAT"
+
+# How often to do a full re-poll of every pipeline's last 4 builds. Kept
+# high because the real-time webhook listener (buildEventTopic below)
+# should catch changes as they happen -- this is just the drift-correction
+# backstop.
+fullRefreshIntervalSeconds: 3600
+
+# How long each of the OLED's two rotating line-2 messages shows before
+# switching. A full "slot" per pipeline is 2x this.
+pipelineMessageDurationSeconds: 5
+
+mqtt:
+  # Same broker the Quad-T panel itself uses.
+  serverUrl: "mqtt-mosquitto.mqtt.svc"
+  serverPort: 1883
+  # Topic the Azure DevOps webhook (relayed through N8N) publishes
+  # run.statechanged events to.
+  buildEventTopic: "azureDevOps/builds/buildEvent"
+
+quadT:
+  deviceName: "quadTFrontPanel01"
+  # Passed straight through as pixelBrightness.
+  brightness: 1.0
+  # How much to scale down the 6 non-selected hexagon pixels, so the
+  # currently-highlighted pipeline stands out. Experiment with this to
+  # taste.
+  dimPixelMultiplier: 0.25
+
+resources:
+  requests:
+    cpu: "50m"
+    memory: "32Mi"
+  limits:
+    cpu: "200m"
+    memory: "64Mi"
+
+podLabels: {}
+podAnnotations: {}

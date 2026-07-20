@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "azurebuildmonitor.fullname" . }}
+  labels: {{- include "azurebuildmonitor.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "azurebuildmonitor.name" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "azurebuildmonitor.name" . }}
+        {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations: {{ toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      containers:
+      - name: azurebuildmonitor
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        envFrom:
+        - configMapRef:
+            name: {{ include "azurebuildmonitor.fullname" . }}-cfg
+        env:
+        - name: AZURE_DEVOPS_PAT
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.azureDevOps.existingSecret }}
+              key: {{ .Values.azureDevOps.existingSecretKey | default "AZURE_DEVOPS_PAT" }}
+        resources: {{- toYaml .Values.resources | nindent 10 }}

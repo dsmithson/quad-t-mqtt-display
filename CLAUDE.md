@@ -2,9 +2,13 @@
 
 MicroPython firmware for a Raspberry Pi Pico W that drives a salvaged
 Christie Quad-T video encoder front panel (a 128x32 SSD1306 SPI OLED plus a
-NeoPixel chain) over MQTT, plus a Python tester CLI for driving it from a
-dev machine. See `README.md` for the full pinout, MQTT topic/JSON schema,
-and usage instructions -- this file is about how to *work on* the codebase.
+NeoPixel chain) over MQTT, a Python tester CLI for driving it from a dev
+machine, and a Go service (`azureBuildMonitor/`) that's an actual consumer
+of the panel -- monitors Azure DevOps pipelines and displays their status.
+They're versioned together in one repo since the client app and the
+device it drives need to stay in sync. See `README.md` for the panel's
+full pinout, MQTT topic/JSON schema, and usage instructions -- this file
+is about how to *work on* the codebase.
 
 ## Layout
 
@@ -20,6 +24,15 @@ and usage instructions -- this file is about how to *work on* the codebase.
   and watching the device's `state`/`status` topics. This is the fastest
   way to verify a firmware change actually works; prefer it over writing
   one-off MQTT test scripts.
+- `azureBuildMonitor/` -- a standalone Go service/app with its own
+  `go.mod`, tests, Dockerfile, and Helm chart (`helm/`). See its own
+  README for details. Its `internal/quadt` package is a hand-written
+  client for the panel's MQTT protocol (mirrors `firmware/README.md`'s
+  JSON schema) -- if the firmware's schema changes, that package needs a
+  matching update. GitHub Actions for it lives at the repo root
+  (`.github/workflows/azure-build-monitor-docker-publish.yml`) since
+  workflows can't live in subdirectories; it's path-filtered to only
+  trigger on changes under `azureBuildMonitor/`.
 
 ## Dev workflow
 
