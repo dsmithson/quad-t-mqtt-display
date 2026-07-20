@@ -102,11 +102,11 @@ off a Docker build.
 
 ```
 # Create the PAT secret once, out of band (never commit it):
-kubectl create secret generic azure-devops-pat -n buildMonitor \
+kubectl create secret generic azure-devops-pat -n azure-build-monitor \
   --from-literal=AZURE_DEVOPS_PAT=<token>
 
 # Deploy/upgrade:
-helm upgrade --install azurebuildmonitor ./helm -n buildMonitor --create-namespace
+helm upgrade --install azurebuildmonitor ./helm -n azure-build-monitor --create-namespace
 ```
 
 ## Possible future improvements
