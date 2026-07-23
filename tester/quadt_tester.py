@@ -6,8 +6,9 @@ watch the device's state/status topics to confirm what it applied.
 
 Examples:
   quadt_tester.py text --line1 "Hello world"
-  quadt_tester.py text --line1 "A very long line that needs to scroll" --autoscroll
+  quadt_tester.py text --line1 "Pipeline Name" --line1-align left --line2 "A long branch/name/here" --line2-align left --line2-autoscroll
   quadt_tester.py text --line1 "Ready" --burn-in-mode bounce --burn-in-interval 10
+  quadt_tester.py text --line1 "Ready" --burn-in-mode off
   quadt_tester.py leds --color 255,0,0
   quadt_tester.py leds --colors 255,0,0 0,255,0 0,0,255
   quadt_tester.py leds --color 0,255,0 --transition-duration 2 --transition-type smooth
@@ -58,10 +59,13 @@ def cmd_text(args):
     display = {
         "drawMode": "text2Line" if args.line2 else "text1Line",
         "textLine1": args.line1,
-        "textAutoScroll": args.autoscroll,
+        "textLine1Align": args.line1_align,
+        "textLine1AutoScroll": args.line1_autoscroll,
     }
     if args.line2:
         display["textLine2"] = args.line2
+        display["textLine2Align"] = args.line2_align
+        display["textLine2AutoScroll"] = args.line2_autoscroll
     if args.burn_in_interval is not None:
         display["oledBurnInProtectionInterval"] = args.burn_in_interval
     if args.burn_in_mode is not None:
@@ -158,13 +162,17 @@ def build_parser():
     p_text = sub.add_parser("text", help="set display text")
     p_text.add_argument("--line1", default="", help="first line of text")
     p_text.add_argument("--line2", default="", help="second line of text (switches to text2Line mode)")
-    p_text.add_argument("--autoscroll", action="store_true", help="scroll lines wider than the screen")
+    p_text.add_argument("--line1-align", choices=("left", "center"), default="center", help="default: %(default)s")
+    p_text.add_argument("--line2-align", choices=("left", "center"), default="center", help="default: %(default)s")
+    p_text.add_argument("--line1-autoscroll", action="store_true", help="scroll line 1 if wider than the screen")
+    p_text.add_argument("--line2-autoscroll", action="store_true", help="scroll line 2 if wider than the screen")
     p_text.add_argument(
         "--burn-in-interval", type=int, default=None,
-        help="seconds between burn-in mitigation actions, capped at 30 by the device (default: %(default)s)",
+        help="invertDisplay: seconds of static content required before inverting once; "
+             "bounce: seconds between nudges. Capped at 300, defaults to 60 (device-side).",
     )
     p_text.add_argument(
-        "--burn-in-mode", choices=("invertDisplay", "bounce"), default=None,
+        "--burn-in-mode", choices=("invertDisplay", "bounce", "off"), default=None,
         help="burn-in mitigation strategy (default: device keeps its current mode)",
     )
     p_text.set_defaults(func=cmd_text)
@@ -174,7 +182,7 @@ def build_parser():
     p_pixels.add_argument("--width", type=int, default=128)
     p_pixels.add_argument("--height", type=int, default=32)
     p_pixels.add_argument("--burn-in-interval", type=int, default=None)
-    p_pixels.add_argument("--burn-in-mode", choices=("invertDisplay", "bounce"), default=None)
+    p_pixels.add_argument("--burn-in-mode", choices=("invertDisplay", "bounce", "off"), default=None)
     p_pixels.set_defaults(func=cmd_pixels)
 
     p_leds = sub.add_parser("leds", help="set NeoPixel colors")

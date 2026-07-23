@@ -130,12 +130,15 @@ other. Just never feed external 5V into the VBUS pin itself.
 {
   "display": {
     "drawMode": "pixels | text1Line | text2Line",
-    "oledBurnInProtectionInterval": 30,
-    "oledBurnInProtectionMode": "invertDisplay | bounce",
+    "oledBurnInProtectionInterval": 60,
+    "oledBurnInProtectionMode": "invertDisplay | bounce | off",
     "pixelData": "<1024 hex chars = 512 bytes, 128x32 1bpp framebuffer>",
     "textLine1": "My Custom Text",
     "textLine2": "Other custom text",
-    "textAutoScroll": false
+    "textLine1Align": "left | center",
+    "textLine2Align": "left | center",
+    "textLine1AutoScroll": false,
+    "textLine2AutoScroll": false
   },
   "leds": [
     { "r": 255, "g": 0, "b": 0 },
@@ -185,12 +188,32 @@ It's independent of `leds` -- send it alone to just dim/brighten without
 touching any colors. The retained `state` topic always reports each
 pixel's original, unscaled color regardless of the current brightness.
 
-`oledBurnInProtectionInterval` is seconds between burn-in mitigation
-actions; the device always clamps it to 30s max (and defaults to 30s if
-omitted) — a value can be *lower* than 30 but never higher.
-`oledBurnInProtectionMode` picks the strategy: `invertDisplay` (default)
-periodically inverts the whole screen; `bounce` nudges the text position
-around the screen a pixel at a time, DVD-logo style.
+`textLine1Align`/`textLine2Align` (default `center`) control horizontal
+placement when a line fits within the screen; `left` starts it at the
+left edge instead of centering it.
+
+`textLine1AutoScroll`/`textLine2AutoScroll` (default `false`, independent
+per line) control what happens when a line is *wider* than the screen:
+`false` just left-aligns and clips it; `true` scrolls it back and forth
+("ping-pong" -- starts fully visible from the left, scrolls left until
+the end of the text is flush with the right edge, then reverses -- no
+wraparound jump).
+
+`oledBurnInProtectionInterval`'s meaning depends on the mode: for
+`invertDisplay`, it's how many seconds the display must have shown
+genuinely *static* content (no text change, no active per-line
+scrolling) before inverting once -- inverting on a blind fixed timer
+regardless of motion was jarring in practice, so now it only kicks in
+once nothing has actually changed for a while, and any new content
+(or resuming scroll) immediately un-inverts. New content always renders
+right-side-up first; you're never left waiting out a stale inversion to
+read it. For `bounce`, it's still just the nudge cadence, unaffected by
+staticness. The device clamps this to 300s max and defaults to 60s if
+omitted (a value can be lower than 60, just not above 300).
+`oledBurnInProtectionMode` picks the strategy: `invertDisplay` (default,
+motion-aware as above), `bounce` (nudges the text position around the
+screen a pixel at a time, DVD-logo style, always on its own timer), or
+`off` (no burn-in mitigation at all).
 
 ## Tester CLI
 
@@ -199,8 +222,9 @@ cd tester
 pip install -r requirements.txt
 
 python quadt_tester.py text --line1 "Hello world"
-python quadt_tester.py text --line1 "A long line that needs to scroll across the screen" --autoscroll
+python quadt_tester.py text --line1 "Pipeline Name" --line1-align left --line2 "A long branch name that needs to scroll" --line2-align left --line2-autoscroll
 python quadt_tester.py text --line1 "Ready" --burn-in-mode bounce --burn-in-interval 10
+python quadt_tester.py text --line1 "Ready" --burn-in-mode off
 python quadt_tester.py leds --color 255,0,0
 python quadt_tester.py leds --colors 255,0,0 0,255,0 0,0,255
 python quadt_tester.py leds --color 0,255,0 --transition-duration 2 --transition-type smooth

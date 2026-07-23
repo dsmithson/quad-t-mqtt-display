@@ -85,10 +85,23 @@ worth not rediscovering each session.
   and `as_state()` always hold/report the original unscaled values. Keep
   it that way; scaling storage in place would make brightness changes
   lossy and complicate every other piece of pixel-state logic.
-- **OLED burn-in mitigation.** `DisplayController.tick()` handles both
-  strategies (`invertDisplay` and `bounce`) on the same
-  `oledBurnInProtectionInterval` timer, which is always clamped to 30s
-  max regardless of what a message requests.
+- **OLED burn-in mitigation.** Three modes: `invertDisplay` (default),
+  `bounce`, `off`. `bounce` is a simple always-on-timer nudge, unaffected
+  by anything else. `invertDisplay` is motion-aware -- it only inverts
+  once the display has held genuinely static content (tracked via
+  `_content_signature()`: draw mode + both text lines + pixel data) for
+  `oledBurnInProtectionInterval` seconds, and active per-line scrolling
+  counts as motion too (resets the same clock every tick it advances).
+  Any new content immediately un-inverts rather than leaving stale
+  inverted text on screen. `oledBurnInProtectionInterval` is
+  mode-dependent: "seconds of staticness required" for `invertDisplay`,
+  "seconds between nudges" for `bounce` -- same field, shared because
+  splitting it into two fields didn't seem worth the extra config surface.
+  Clamped to 300s max, defaults to 60s if unset. Don't conflate this with
+  per-line *scroll* motion (`_advance_line_scroll()`, a ping-pong between
+  x=0 and x=width-text_w) -- scrolling is a rendering concern independent
+  of which burn-in mode is active; it just happens to also feed the
+  invertDisplay staticness clock.
 - **OLED periodic self-heal.** `DisplayController.tick()` also
   unconditionally re-sends the full SSD1306 init sequence + redraw every
   `OLED_REINIT_INTERVAL_MS` (15s), regardless of whether anything visibly
