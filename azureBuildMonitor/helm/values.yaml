@@ -24,9 +24,10 @@ azureDevOps:
 # backstop.
 fullRefreshIntervalSeconds: 3600
 
-# How long each of the OLED's two rotating line-2 messages shows before
-# switching. A full "slot" per pipeline is 2x this.
-pipelineMessageDurationSeconds: 5
+# How long EACH OLED line-2 message shows before switching to the next
+# one (status+time, then branch -- a pipeline's full "slot" is the number
+# of messages it has times this). Applies per-line, not per-pipeline.
+statusLineDurationSeconds: 5
 
 mqtt:
   # Same broker the Quad-T panel itself uses.
@@ -38,12 +39,40 @@ mqtt:
 
 quadT:
   deviceName: "quadTFrontPanel01"
-  # Passed straight through as pixelBrightness.
-  brightness: 1.0
   # How much to scale down the 6 non-selected hexagon pixels, so the
   # currently-highlighted pipeline stands out. Experiment with this to
   # taste.
   dimPixelMultiplier: 0.25
+
+# Per-status LED colors, with separate values for the hexagon pixels
+# (behind a diffuser -- usually needs to run brighter/more saturated) and
+# the 4 strip pixels (no diffuser -- usually needs to run dimmer). This is
+# where brightness tuning lives now instead of a single global
+# "brightness" knob: since each status/group combination has its own
+# explicit r/g/b, just pick dimmer or brighter values directly rather
+# than applying a multiplier on top. blinkDurationSeconds only matters
+# for "running" (the only status that blinks); omit it elsewhere.
+#
+# Every status below is optional -- anything you don't override here
+# keeps the app's built-in default (see internal/display/colors.go),
+# so you only need to list the ones you're actually tuning.
+statusColors:
+  pending:
+    hexagon: { r: 0, g: 0, b: 255 }
+    strip: { r: 0, g: 0, b: 255 }
+  running:
+    hexagon: { r: 0, g: 0, b: 255 }
+    strip: { r: 0, g: 0, b: 255 }
+    blinkDurationSeconds: 1.0
+  succeeded:
+    hexagon: { r: 0, g: 255, b: 0 }
+    strip: { r: 0, g: 255, b: 0 }
+  failed:
+    hexagon: { r: 255, g: 0, b: 0 }
+    strip: { r: 255, g: 0, b: 0 }
+  cancelled:
+    hexagon: { r: 128, g: 128, b: 128 }
+    strip: { r: 128, g: 128, b: 128 }
 
 resources:
   requests:

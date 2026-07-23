@@ -25,12 +25,16 @@ type Config struct {
 
 	// Quad-T front panel
 	QuadTDeviceName         string
-	QuadTBrightness         float64
 	QuadTDimPixelMultiplier float64
 
-	// How long each of the two OLED line-2 messages (status+time, then
-	// branch) shows before switching -- a full pipeline "slot" is 2x this.
-	PipelineMessageDuration int // seconds
+	// How long each individual OLED line-2 message (status+time, branch,
+	// ...) shows before switching to the next one. A pipeline's full
+	// "slot" is however many messages it has times this.
+	StatusLineDurationSeconds int
+
+	// Raw JSON for display.ParseStatusColors -- see that function for the
+	// shape. Empty string means "use display.DefaultStatusColors".
+	StatusColorsJSON string
 }
 
 func Load() (*Config, error) {
@@ -46,10 +50,10 @@ func Load() (*Config, error) {
 		BuildEventTopic: getenv("BUILD_EVENT_TOPIC", "azureDevOps/builds/buildEvent"),
 
 		QuadTDeviceName:         getenv("QUADT_DEVICE_NAME", "quadTFrontPanel01"),
-		QuadTBrightness:         getenvFloat("QUADT_BRIGHTNESS", 1.0),
 		QuadTDimPixelMultiplier: getenvFloat("QUADT_DIM_PIXEL_MULTIPLIER", 0.25),
 
-		PipelineMessageDuration: getenvInt("PIPELINE_MESSAGE_DURATION_SECONDS", 5),
+		StatusLineDurationSeconds: getenvInt("STATUS_LINE_DURATION_SECONDS", 5),
+		StatusColorsJSON:          getenv("STATUS_COLORS_JSON", ""),
 	}
 
 	ids, err := getenvIntList("AZURE_DEVOPS_BUILD_DEFINITION_IDS", nil)
@@ -78,11 +82,15 @@ func Load() (*Config, error) {
 }
 
 func (c *Config) String() string {
+	statusColors := "default"
+	if c.StatusColorsJSON != "" {
+		statusColors = "custom"
+	}
 	return fmt.Sprintf(
-		"adoURL=%s project=%s definitionIDs=%v refreshInterval=%ds mqtt=%s:%d buildEventTopic=%s quadT=%s brightness=%.2f dimMultiplier=%.2f msgDuration=%ds",
+		"adoURL=%s project=%s definitionIDs=%v refreshInterval=%ds mqtt=%s:%d buildEventTopic=%s quadT=%s dimMultiplier=%.2f lineDuration=%ds statusColors=%s",
 		c.AzureDevOpsURL, c.AzureDevOpsProjectName, c.BuildDefinitionIDs, c.FullRefreshInterval,
 		c.MQTTServerHost, c.MQTTServerPort, c.BuildEventTopic,
-		c.QuadTDeviceName, c.QuadTBrightness, c.QuadTDimPixelMultiplier, c.PipelineMessageDuration,
+		c.QuadTDeviceName, c.QuadTDimPixelMultiplier, c.StatusLineDurationSeconds, statusColors,
 	)
 }
 

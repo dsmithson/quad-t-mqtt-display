@@ -69,3 +69,16 @@ func branchLine(b store.BuildInfo) string {
 	}
 	return fmt.Sprintf("Branch: %s", branch)
 }
+
+// lineMessages returns the ordered set of OLED line-2 messages to cycle
+// through for a pipeline's latest build -- currently status+time and
+// branch, but callers just cycle through however many come back, so
+// adding a third message later (e.g. commit message, requested-by) is
+// just appending to this slice.
+func lineMessages(p store.Pipeline, now time.Time) []string {
+	latest, ok := p.Latest()
+	if !ok {
+		return []string{"No build data"}
+	}
+	return []string{statusLine(latest, now), branchLine(latest)}
+}

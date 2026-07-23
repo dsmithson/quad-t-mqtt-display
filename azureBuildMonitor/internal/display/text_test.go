@@ -54,6 +54,30 @@ func TestStatusLineWording(t *testing.T) {
 	}
 }
 
+func TestLineMessagesNoBuildDataIsSingleMessage(t *testing.T) {
+	messages := lineMessages(store.Pipeline{}, time.Now())
+	if len(messages) != 1 || messages[0] != "No build data" {
+		t.Errorf("expected a single 'No build data' message, got %v", messages)
+	}
+}
+
+func TestLineMessagesWithBuildDataHasStatusThenBranch(t *testing.T) {
+	now := time.Now()
+	p := store.Pipeline{Builds: []store.BuildInfo{
+		{Status: store.StatusSucceeded, FinishTime: now.Add(-5 * time.Minute), SourceBranch: "refs/heads/main"},
+	}}
+	messages := lineMessages(p, now)
+	if len(messages) != 2 {
+		t.Fatalf("expected 2 messages, got %d: %v", len(messages), messages)
+	}
+	if messages[0] != "Succeeded: 5 Mins ago" {
+		t.Errorf("messages[0] = %q, want status line", messages[0])
+	}
+	if messages[1] != "Branch: main" {
+		t.Errorf("messages[1] = %q, want branch line", messages[1])
+	}
+}
+
 func TestBranchLineTrimsRefsHeadsPrefix(t *testing.T) {
 	cases := []struct {
 		branch string

@@ -17,27 +17,33 @@ import (
 )
 
 type Cycler struct {
-	cfg   *config.Config
-	store *store.Store
-	quadt *quadt.Client
+	cfg    *config.Config
+	store  *store.Store
+	quadt  *quadt.Client
+	styles StatusColors
 
 	selectedIndex int
-	line2Toggle   int
+	messageIndex  int
 }
 
+// NewCycler parses cfg.StatusColorsJSON (falling back to
+// DefaultStatusColors and logging a warning if it's invalid -- a config
+// typo shouldn't crash the whole service) and returns a ready Cycler.
 func NewCycler(cfg *config.Config, st *store.Store, qc *quadt.Client) *Cycler {
-	return &Cycler{cfg: cfg, store: st, quadt: qc}
+	styles, err := ParseStatusColors(cfg.StatusColorsJSON)
+	if err != nil {
+		log.Printf("display: %v -- falling back to default status colors", err)
+		styles = DefaultStatusColors
+	}
+	return &Cycler{cfg: cfg, store: st, quadt: qc, styles: styles}
 }
 
-// Run publishes an initial brightness + display state, then advances the
-// cycle (toggle the OLED's second line, or move to the next pipeline)
-// every PipelineMessageDuration seconds until ctx is cancelled.
+// Run publishes an initial display state, then advances the cycle
+// (the OLED's next line-2 message, or move to the next pipeline once
+// every message for the current one has shown) every
+// StatusLineDurationSeconds until ctx is cancelled.
 func (c *Cycler) Run(ctx context.Context) {
-	if err := c.publishBrightness(); err != nil {
-		log.Printf("display: publishing initial brightness: %v", err)
-	}
-
-	interval := time.Duration(c.cfg.PipelineMessageDuration) * time.Second
+	interval := time.Duration(c.cfg.StatusLineDurationSeconds) * time.Second
 	if interval <= 0 {
 		interval = 5 * time.Second
 	}
@@ -56,20 +62,19 @@ func (c *Cycler) Run(ctx context.Context) {
 	}
 }
 
-func (c *Cycler) publishBrightness() error {
-	return c.quadt.Publish(quadt.Command{
-		PixelBrightness: quadt.Float64Ptr(c.cfg.QuadTBrightness),
-	})
-}
-
 func (c *Cycler) advance() {
 	pipelines := c.store.Pipelines()
 	if len(pipelines) == 0 {
 		return
 	}
-	c.line2Toggle++
-	if c.line2Toggle >= 2 {
-		c.line2Toggle = 0
+	if c.selectedIndex >= len(pipelines) {
+		c.selectedIndex = 0
+	}
+	messages := lineMessages(pipelines[c.selectedIndex], time.Now())
+
+	c.messageIndex++
+	if c.messageIndex >= len(messages) {
+		c.messageIndex = 0
 		c.selectedIndex = (c.selectedIndex + 1) % len(pipelines)
 	}
 }
@@ -86,11 +91,11 @@ func (c *Cycler) publish() {
 	now := time.Now()
 
 	leds := make([]quadt.Led, 0, 11)
-	leds = append(leds, stripLEDs(selected)...)
-	leds = append(leds, hexagonLEDs(pipelines, c.selectedIndex, c.cfg.QuadTDimPixelMultiplier)...)
+	leds = append(leds, stripLEDs(selected, c.styles)...)
+	leds = append(leds, hexagonLEDs(pipelines, c.selectedIndex, c.cfg.QuadTDimPixelMultiplier, c.styles)...)
 
 	cmd := quadt.Command{
-		Display: buildDisplay(selected, c.line2Toggle, now),
+		Display: buildDisplay(selected, c.messageIndex, now),
 		Leds:    leds,
 	}
 	if err := c.quadt.Publish(cmd); err != nil {
@@ -101,11 +106,11 @@ func (c *Cycler) publish() {
 // stripLEDs renders logical LEDs 0-3 -- the selected pipeline's up-to-4
 // most recent builds, newest first. Slots beyond the available history
 // are off.
-func stripLEDs(p store.Pipeline) []quadt.Led {
+func stripLEDs(p store.Pipeline, styles StatusColors) []quadt.Led {
 	leds := make([]quadt.Led, 4)
 	for i := 0; i < 4; i++ {
 		if i < len(p.Builds) {
-			r, g, b, mode, blink := ledFor(p.Builds[i].Status)
+			r, g, b, mode, blink := ledFor(styles, p.Builds[i].Status, GroupStrip)
 			leds[i] = quadt.Led{R: r, G: g, B: b, DisplayMode: mode, BlinkDuration: blink}
 		} else {
 			leds[i] = quadt.Led{R: 0, G: 0, B: 0, DisplayMode: "solid"}
@@ -118,14 +123,14 @@ func stripLEDs(p store.Pipeline) []quadt.Led {
 // configured order, each always showing its own true status color/mode.
 // Every pipeline except the currently-selected one has its color scaled
 // down by dimMultiplier so the selected one stands out.
-func hexagonLEDs(pipelines []store.Pipeline, selectedIndex int, dimMultiplier float64) []quadt.Led {
+func hexagonLEDs(pipelines []store.Pipeline, selectedIndex int, dimMultiplier float64, styles StatusColors) []quadt.Led {
 	leds := make([]quadt.Led, len(pipelines))
 	for i, p := range pipelines {
 		status := store.StatusUnknown
 		if latest, ok := p.Latest(); ok {
 			status = latest.Status
 		}
-		r, g, b, mode, blink := ledFor(status)
+		r, g, b, mode, blink := ledFor(styles, status, GroupHexagon)
 		if i != selectedIndex {
 			r, g, b = dim(r, dimMultiplier), dim(g, dimMultiplier), dim(b, dimMultiplier)
 		}
@@ -134,26 +139,21 @@ func hexagonLEDs(pipelines []store.Pipeline, selectedIndex int, dimMultiplier fl
 	return leds
 }
 
-func buildDisplay(p store.Pipeline, line2Toggle int, now time.Time) *quadt.Display {
+func buildDisplay(p store.Pipeline, messageIndex int, now time.Time) *quadt.Display {
 	line1 := p.Name
 	if line1 == "" {
 		line1 = "(unknown)"
 	}
 
-	var line2 string
-	latest, ok := p.Latest()
-	if !ok {
-		line2 = "No build data"
-	} else if line2Toggle == 0 {
-		line2 = statusLine(latest, now)
-	} else {
-		line2 = branchLine(latest)
+	messages := lineMessages(p, now)
+	if messageIndex >= len(messages) {
+		messageIndex = 0
 	}
 
 	return &quadt.Display{
 		DrawMode:       "text2Line",
 		TextLine1:      line1,
-		TextLine2:      line2,
+		TextLine2:      messages[messageIndex],
 		TextAutoScroll: quadt.BoolPtr(true),
 	}
 }

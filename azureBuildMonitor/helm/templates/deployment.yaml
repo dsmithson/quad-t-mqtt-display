@@ -13,9 +13,16 @@ spec:
       labels:
         app.kubernetes.io/name: {{ include "azurebuildmonitor.name" . }}
         {{- with .Values.podLabels }}{{ toYaml . | nindent 8 }}{{- end }}
-      {{- with .Values.podAnnotations }}
-      annotations: {{ toYaml . | nindent 8 }}
-      {{- end }}
+      annotations:
+        # Forces a rollout whenever the ConfigMap's content changes.
+        # envFrom only reads env vars at container startup, so without
+        # this a `helm upgrade` that only touches values.yaml (brightness,
+        # timing, status colors, ...) silently has no effect on the
+        # already-running pod until something else happens to restart it.
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- with .Values.podAnnotations }}
+        {{ toYaml . | nindent 8 }}
+        {{- end }}
     spec:
       containers:
       - name: azurebuildmonitor

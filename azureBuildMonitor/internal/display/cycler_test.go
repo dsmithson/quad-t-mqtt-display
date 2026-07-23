@@ -31,19 +31,22 @@ func (f *fakePublisher) last() quadt.Command {
 
 func testConfig() *config.Config {
 	return &config.Config{
-		BuildDefinitionIDs:      []int{82, 85, 44, 97, 52, 6, 1},
-		QuadTBrightness:         0.8,
-		QuadTDimPixelMultiplier: 0.25,
-		PipelineMessageDuration: 5,
+		BuildDefinitionIDs:        []int{82, 85, 44, 97, 52, 6, 1},
+		QuadTDimPixelMultiplier:   0.25,
+		StatusLineDurationSeconds: 5,
 	}
+}
+
+func newTestCycler(cfg *config.Config, st *store.Store) (*Cycler, *fakePublisher) {
+	fp := &fakePublisher{}
+	qc := quadt.NewClient(fp, "quadTFrontPanel01")
+	return NewCycler(cfg, st, qc), fp
 }
 
 func TestPublishAlwaysSendsElevenLEDs(t *testing.T) {
 	cfg := testConfig()
 	st := store.New(cfg.BuildDefinitionIDs)
-	fp := &fakePublisher{}
-	qc := quadt.NewClient(fp, "quadTFrontPanel01")
-	c := NewCycler(cfg, st, qc)
+	c, fp := newTestCycler(cfg, st)
 
 	c.publish()
 
@@ -56,6 +59,21 @@ func TestPublishAlwaysSendsElevenLEDs(t *testing.T) {
 	}
 }
 
+func TestPublishNeverSendsPixelBrightness(t *testing.T) {
+	// Brightness/intensity is now baked into the configured per-status,
+	// per-group colors -- the app shouldn't rely on the device's global
+	// pixelBrightness passthrough at all.
+	cfg := testConfig()
+	st := store.New(cfg.BuildDefinitionIDs)
+	c, fp := newTestCycler(cfg, st)
+
+	c.publish()
+
+	if fp.last().PixelBrightness != nil {
+		t.Errorf("expected PixelBrightness to be omitted, got %v", *fp.last().PixelBrightness)
+	}
+}
+
 func TestSelectedHexagonPixelIsFullBrightnessOthersAreDimmed(t *testing.T) {
 	cfg := testConfig()
 	st := store.New(cfg.BuildDefinitionIDs)
@@ -64,9 +82,7 @@ func TestSelectedHexagonPixelIsFullBrightnessOthersAreDimmed(t *testing.T) {
 	for _, id := range cfg.BuildDefinitionIDs {
 		st.ReplaceBuilds(id, "p", []store.BuildInfo{{ID: id, Status: store.StatusSucceeded, FinishTime: now}})
 	}
-	fp := &fakePublisher{}
-	qc := quadt.NewClient(fp, "quadTFrontPanel01")
-	c := NewCycler(cfg, st, qc)
+	c, fp := newTestCycler(cfg, st)
 
 	c.publish() // selectedIndex starts at 0
 
@@ -82,36 +98,50 @@ func TestSelectedHexagonPixelIsFullBrightnessOthersAreDimmed(t *testing.T) {
 	}
 }
 
-func TestAdvanceTogglesLine2TwiceBeforeMovingToNextPipeline(t *testing.T) {
+func TestAdvanceCyclesThroughAllLineMessagesBeforeMovingToNextPipeline(t *testing.T) {
 	cfg := testConfig()
 	st := store.New(cfg.BuildDefinitionIDs)
-	fp := &fakePublisher{}
-	qc := quadt.NewClient(fp, "quadTFrontPanel01")
-	c := NewCycler(cfg, st, qc)
+	now := time.Now()
+	for _, id := range cfg.BuildDefinitionIDs {
+		st.ReplaceBuilds(id, "p", []store.BuildInfo{{ID: id, Status: store.StatusSucceeded, FinishTime: now, SourceBranch: "refs/heads/main"}})
+	}
+	c, _ := newTestCycler(cfg, st)
 
-	if c.selectedIndex != 0 || c.line2Toggle != 0 {
-		t.Fatalf("expected fresh cycler to start at pipeline 0, line2Toggle 0")
+	// A build with status+time and branch has exactly 2 messages.
+	if c.selectedIndex != 0 || c.messageIndex != 0 {
+		t.Fatalf("expected fresh cycler to start at pipeline 0, message 0")
 	}
 	c.advance()
-	if c.selectedIndex != 0 || c.line2Toggle != 1 {
-		t.Errorf("after 1 advance: expected same pipeline, line2Toggle=1; got index=%d toggle=%d", c.selectedIndex, c.line2Toggle)
+	if c.selectedIndex != 0 || c.messageIndex != 1 {
+		t.Errorf("after 1 advance: expected same pipeline, message 1; got index=%d message=%d", c.selectedIndex, c.messageIndex)
 	}
 	c.advance()
-	if c.selectedIndex != 1 || c.line2Toggle != 0 {
-		t.Errorf("after 2 advances: expected next pipeline, toggle reset; got index=%d toggle=%d", c.selectedIndex, c.line2Toggle)
+	if c.selectedIndex != 1 || c.messageIndex != 0 {
+		t.Errorf("after 2 advances: expected next pipeline, message reset; got index=%d message=%d", c.selectedIndex, c.messageIndex)
+	}
+}
+
+func TestAdvanceHandlesSingleMessagePipelines(t *testing.T) {
+	// A pipeline with no build history yet only has 1 message
+	// ("No build data"), so it should move to the next pipeline every
+	// single advance, not every 2.
+	cfg := testConfig()
+	st := store.New(cfg.BuildDefinitionIDs) // no builds recorded for anyone
+	c, _ := newTestCycler(cfg, st)
+
+	c.advance()
+	if c.selectedIndex != 1 || c.messageIndex != 0 {
+		t.Errorf("expected immediate advance to next pipeline for a 1-message pipeline; got index=%d message=%d", c.selectedIndex, c.messageIndex)
 	}
 }
 
 func TestAdvanceWrapsAroundToFirstPipeline(t *testing.T) {
 	cfg := testConfig()
 	st := store.New(cfg.BuildDefinitionIDs)
-	fp := &fakePublisher{}
-	qc := quadt.NewClient(fp, "quadTFrontPanel01")
-	c := NewCycler(cfg, st, qc)
+	c, _ := newTestCycler(cfg, st)
 	c.selectedIndex = len(cfg.BuildDefinitionIDs) - 1 // last pipeline
 
-	c.advance() // toggles line2 first
-	c.advance() // now should wrap
+	c.advance() // no build history -> 1 message -> advances immediately
 
 	if c.selectedIndex != 0 {
 		t.Errorf("expected wraparound to pipeline 0, got %d", c.selectedIndex)
@@ -120,7 +150,7 @@ func TestAdvanceWrapsAroundToFirstPipeline(t *testing.T) {
 
 func TestStripLEDsPadsMissingHistoryWithOff(t *testing.T) {
 	p := store.Pipeline{Builds: []store.BuildInfo{{Status: store.StatusSucceeded}}} // only 1 of 4
-	leds := stripLEDs(p)
+	leds := stripLEDs(p, DefaultStatusColors)
 	if len(leds) != 4 {
 		t.Fatalf("expected 4 strip LEDs, got %d", len(leds))
 	}
@@ -131,5 +161,16 @@ func TestStripLEDsPadsMissingHistoryWithOff(t *testing.T) {
 		if leds[i].R != 0 || leds[i].G != 0 || leds[i].B != 0 {
 			t.Errorf("strip[%d] should be off (no history), got %+v", i, leds[i])
 		}
+	}
+}
+
+func TestNewCyclerFallsBackToDefaultsOnInvalidStatusColorsJSON(t *testing.T) {
+	cfg := testConfig()
+	cfg.StatusColorsJSON = "{not valid"
+	st := store.New(cfg.BuildDefinitionIDs)
+	c, _ := newTestCycler(cfg, st)
+
+	if len(c.styles) != len(DefaultStatusColors) {
+		t.Errorf("expected fallback to default status colors on invalid JSON, got %d entries", len(c.styles))
 	}
 }
