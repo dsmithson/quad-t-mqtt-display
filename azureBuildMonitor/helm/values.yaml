@@ -1,7 +1,13 @@
 image:
   repository: dsmithson/custom-build-monitor
   tag: "latest"
-  pullPolicy: IfNotPresent
+  # Always, not IfNotPresent -- "latest" is a mutable tag, and
+  # IfNotPresent means the kubelet reuses whatever it already has cached
+  # locally under that tag without checking the registry, so a rollout
+  # (even one forced by checksum/config) can silently keep running an
+  # old binary forever. Pin to an immutable sha-<shortsha> tag instead if
+  # you want reproducible deploys where this doesn't matter.
+  pullPolicy: Always
 
 replicas: 1
 
