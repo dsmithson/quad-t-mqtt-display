@@ -73,8 +73,8 @@ func TestLineMessagesWithBuildDataHasStatusThenBranch(t *testing.T) {
 	if messages[0] != "Succeeded: 5 Mins ago" {
 		t.Errorf("messages[0] = %q, want status line", messages[0])
 	}
-	if messages[1] != "Branch: main" {
-		t.Errorf("messages[1] = %q, want branch line", messages[1])
+	if messages[1] != "main" {
+		t.Errorf("messages[1] = %q, want the branch name alone", messages[1])
 	}
 }
 
@@ -83,10 +83,10 @@ func TestBranchLineTrimsRefsHeadsPrefix(t *testing.T) {
 		branch string
 		want   string
 	}{
-		{"refs/heads/echo/bbc/dev", "Branch: echo/bbc/dev"},
-		{"refs/heads/main", "Branch: main"},
-		{"already-trimmed", "Branch: already-trimmed"},
-		{"", "Branch: unknown"},
+		{"refs/heads/echo/bbc/dev", "echo/bbc/dev"},
+		{"refs/heads/main", "main"},
+		{"already-trimmed", "already-trimmed"},
+		{"", "(unknown branch)"},
 	}
 	for _, c := range cases {
 		got := branchLine(store.BuildInfo{SourceBranch: c.branch})

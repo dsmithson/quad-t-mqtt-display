@@ -14,6 +14,7 @@ data:
   BUILD_EVENT_TOPIC: "{{ .Values.mqtt.buildEventTopic }}"
   QUADT_DEVICE_NAME: "{{ .Values.quadT.deviceName }}"
   QUADT_DIM_PIXEL_MULTIPLIER: "{{ .Values.quadT.dimPixelMultiplier }}"
+  QUADT_LINE2_AUTOSCROLL: "{{ .Values.quadT.line2AutoScroll }}"
   {{- if .Values.statusColors }}
   STATUS_COLORS_JSON: {{ .Values.statusColors | toJson | quote }}
   {{- end }}

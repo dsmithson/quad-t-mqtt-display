@@ -29,7 +29,10 @@ type Display struct {
 	DrawMode                     string `json:"drawMode,omitempty"`
 	TextLine1                    string `json:"textLine1,omitempty"`
 	TextLine2                    string `json:"textLine2,omitempty"`
-	TextAutoScroll               *bool  `json:"textAutoScroll,omitempty"`
+	TextLine1Align               string `json:"textLine1Align,omitempty"`
+	TextLine2Align               string `json:"textLine2Align,omitempty"`
+	TextLine1AutoScroll          *bool  `json:"textLine1AutoScroll,omitempty"`
+	TextLine2AutoScroll          *bool  `json:"textLine2AutoScroll,omitempty"`
 	OledBurnInProtectionInterval *int   `json:"oledBurnInProtectionInterval,omitempty"`
 	OledBurnInProtectionMode     string `json:"oledBurnInProtectionMode,omitempty"`
 }

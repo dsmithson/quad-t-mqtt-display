@@ -27,6 +27,13 @@ type Config struct {
 	QuadTDeviceName         string
 	QuadTDimPixelMultiplier float64
 
+	// The pipeline-name line never scrolls (always left-aligned, static).
+	// The status/branch line is always left-aligned too, but whether it
+	// scrolls when too wide is an experiment worth toggling without a
+	// code change -- static-and-clipped reads fine for short branch
+	// names, and avoids motion some find distracting.
+	Line2AutoScroll bool
+
 	// How long each individual OLED line-2 message (status+time, branch,
 	// ...) shows before switching to the next one. A pipeline's full
 	// "slot" is however many messages it has times this.
@@ -51,6 +58,7 @@ func Load() (*Config, error) {
 
 		QuadTDeviceName:         getenv("QUADT_DEVICE_NAME", "quadTFrontPanel01"),
 		QuadTDimPixelMultiplier: getenvFloat("QUADT_DIM_PIXEL_MULTIPLIER", 0.25),
+		Line2AutoScroll:         getenvBool("QUADT_LINE2_AUTOSCROLL", false),
 
 		StatusLineDurationSeconds: getenvInt("STATUS_LINE_DURATION_SECONDS", 5),
 		StatusColorsJSON:          getenv("STATUS_COLORS_JSON", ""),
@@ -87,10 +95,10 @@ func (c *Config) String() string {
 		statusColors = "custom"
 	}
 	return fmt.Sprintf(
-		"adoURL=%s project=%s definitionIDs=%v refreshInterval=%ds mqtt=%s:%d buildEventTopic=%s quadT=%s dimMultiplier=%.2f lineDuration=%ds statusColors=%s",
+		"adoURL=%s project=%s definitionIDs=%v refreshInterval=%ds mqtt=%s:%d buildEventTopic=%s quadT=%s dimMultiplier=%.2f lineDuration=%ds statusColors=%s line2AutoScroll=%v",
 		c.AzureDevOpsURL, c.AzureDevOpsProjectName, c.BuildDefinitionIDs, c.FullRefreshInterval,
 		c.MQTTServerHost, c.MQTTServerPort, c.BuildEventTopic,
-		c.QuadTDeviceName, c.QuadTDimPixelMultiplier, c.StatusLineDurationSeconds, statusColors,
+		c.QuadTDeviceName, c.QuadTDimPixelMultiplier, c.StatusLineDurationSeconds, statusColors, c.Line2AutoScroll,
 	)
 }
 
@@ -115,6 +123,17 @@ func getenvFloat(k string, def float64) float64 {
 		if f, err := strconv.ParseFloat(v, 64); err == nil {
 			return f
 		}
+	}
+	return def
+}
+
+func getenvBool(k string, def bool) bool {
+	v := strings.TrimSpace(strings.ToLower(os.Getenv(k)))
+	switch v {
+	case "1", "true", "t", "yes", "y", "on":
+		return true
+	case "0", "false", "f", "no", "n", "off":
+		return false
 	}
 	return def
 }

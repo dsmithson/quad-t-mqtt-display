@@ -95,7 +95,7 @@ func (c *Cycler) publish() {
 	leds = append(leds, hexagonLEDs(pipelines, c.selectedIndex, c.cfg.QuadTDimPixelMultiplier, c.styles)...)
 
 	cmd := quadt.Command{
-		Display: buildDisplay(selected, c.messageIndex, now),
+		Display: buildDisplay(selected, c.messageIndex, now, c.cfg.Line2AutoScroll),
 		Leds:    leds,
 	}
 	if err := c.quadt.Publish(cmd); err != nil {
@@ -139,7 +139,13 @@ func hexagonLEDs(pipelines []store.Pipeline, selectedIndex int, dimMultiplier fl
 	return leds
 }
 
-func buildDisplay(p store.Pipeline, messageIndex int, now time.Time) *quadt.Display {
+// buildDisplay renders the OLED command: the pipeline name on line 1
+// (always left-aligned, never scrolls -- it's the "you are here" label,
+// not something to chase across the screen) and the current cycling
+// message on line 2 (always left-aligned; whether it scrolls when too
+// wide is the caller's line2AutoScroll, an experiment worth toggling
+// without a code change).
+func buildDisplay(p store.Pipeline, messageIndex int, now time.Time, line2AutoScroll bool) *quadt.Display {
 	line1 := p.Name
 	if line1 == "" {
 		line1 = "(unknown)"
@@ -151,9 +157,12 @@ func buildDisplay(p store.Pipeline, messageIndex int, now time.Time) *quadt.Disp
 	}
 
 	return &quadt.Display{
-		DrawMode:       "text2Line",
-		TextLine1:      line1,
-		TextLine2:      messages[messageIndex],
-		TextAutoScroll: quadt.BoolPtr(true),
+		DrawMode:            "text2Line",
+		TextLine1:           line1,
+		TextLine2:           messages[messageIndex],
+		TextLine1Align:      "left",
+		TextLine2Align:      "left",
+		TextLine1AutoScroll: quadt.BoolPtr(false),
+		TextLine2AutoScroll: quadt.BoolPtr(line2AutoScroll),
 	}
 }

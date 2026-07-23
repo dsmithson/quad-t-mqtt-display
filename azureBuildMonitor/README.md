@@ -19,8 +19,14 @@ the [Quad-T front panel](../README.md) to show their status.
   else needed, and patches the store in place.
 - **Display cycler**: every `STATUS_LINE_DURATION_SECONDS` (default 5),
   advances to the *next line-2 message* -- currently "status + time in
-  status" then "Branch: ..." -- and once a pipeline's messages are
-  exhausted, moves to the next pipeline. This is per-line, not
+  status" then the branch name alone (no "Branch: " label -- the 16-char
+  line is too tight to spend a third of it on a label) -- and once a
+  pipeline's messages are exhausted, moves to the next pipeline. Line 1
+  (the pipeline name) is always left-aligned and never scrolls; line 2 is
+  always left-aligned too, and whether it scrolls when too wide is
+  `QUADT_LINE2_AUTOSCROLL` (default off -- static and clipped reads fine
+  for most branch names and is less distracting; worth experimenting
+  with). This is per-line, not
   per-pipeline: a pipeline with 2 messages gets a 2x slot, and adding a
   third message later (e.g. commit message) just extends the slot
   automatically, no config change needed. Publishes a fresh command to
@@ -70,6 +76,7 @@ defaults):
 | `BUILD_EVENT_TOPIC` | | default `azureDevOps/builds/buildEvent` |
 | `QUADT_DEVICE_NAME` | | default `quadTFrontPanel01` |
 | `QUADT_DIM_PIXEL_MULTIPLIER` | | 0.0-1.0, default 0.25 |
+| `QUADT_LINE2_AUTOSCROLL` | | whether line 2 scrolls when too wide, default false (static/clipped) |
 | `STATUS_LINE_DURATION_SECONDS` | | seconds each OLED line-2 message shows, default 5 |
 | `STATUS_COLORS_JSON` | | see below; empty/unset uses the built-in defaults |
 

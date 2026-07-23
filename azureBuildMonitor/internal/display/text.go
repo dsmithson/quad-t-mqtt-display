@@ -56,8 +56,11 @@ func statusLine(b store.BuildInfo, now time.Time) string {
 	}
 }
 
-// branchLine renders the "Branch: ..." OLED line, trimming the common
-// "refs/heads/" prefix Azure DevOps puts on SourceBranch.
+// branchLine renders the branch-name OLED line: just the branch itself,
+// trimming the common "refs/heads/" prefix Azure DevOps puts on
+// SourceBranch. No "Branch: " label -- the 16-char line is too tight to
+// spend a third of it on a label when the value alone is usually
+// self-evident in context (it's always the second message shown).
 func branchLine(b store.BuildInfo) string {
 	branch := b.SourceBranch
 	const prefix = "refs/heads/"
@@ -65,9 +68,9 @@ func branchLine(b store.BuildInfo) string {
 		branch = branch[len(prefix):]
 	}
 	if branch == "" {
-		return "Branch: unknown"
+		return "(unknown branch)"
 	}
-	return fmt.Sprintf("Branch: %s", branch)
+	return branch
 }
 
 // lineMessages returns the ordered set of OLED line-2 messages to cycle

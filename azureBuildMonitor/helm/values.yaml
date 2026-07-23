@@ -49,6 +49,12 @@ quadT:
   # currently-highlighted pipeline stands out. Experiment with this to
   # taste.
   dimPixelMultiplier: 0.25
+  # The pipeline-name line (line 1) is always left-aligned and never
+  # scrolls. The status/branch line (line 2) is always left-aligned too;
+  # this controls whether it scrolls when too wide to fit, or just stays
+  # static and clipped. Worth experimenting with -- static reads fine for
+  # short branch names and is less distracting.
+  line2AutoScroll: false
 
 # Per-status LED colors, with separate values for the hexagon pixels
 # (behind a diffuser -- usually needs to run brighter/more saturated) and

@@ -43,6 +43,28 @@ func newTestCycler(cfg *config.Config, st *store.Store) (*Cycler, *fakePublisher
 	return NewCycler(cfg, st, qc), fp
 }
 
+func TestBuildDisplayLine1NeverScrollsBothLinesLeftAligned(t *testing.T) {
+	p := store.Pipeline{Name: "Spyder-S - Complete"}
+	d := buildDisplay(p, 0, time.Now(), true) // line2AutoScroll=true
+	if d.TextLine1Align != "left" || d.TextLine2Align != "left" {
+		t.Errorf("expected both lines left-aligned, got line1=%q line2=%q", d.TextLine1Align, d.TextLine2Align)
+	}
+	if d.TextLine1AutoScroll == nil || *d.TextLine1AutoScroll != false {
+		t.Errorf("line1 should never scroll regardless of config, got %v", d.TextLine1AutoScroll)
+	}
+	if d.TextLine2AutoScroll == nil || *d.TextLine2AutoScroll != true {
+		t.Errorf("line2 should follow the line2AutoScroll argument, got %v", d.TextLine2AutoScroll)
+	}
+}
+
+func TestBuildDisplayLine2AutoScrollFollowsConfigToggle(t *testing.T) {
+	p := store.Pipeline{Name: "Spyder-S - Complete"}
+	d := buildDisplay(p, 0, time.Now(), false)
+	if d.TextLine2AutoScroll == nil || *d.TextLine2AutoScroll != false {
+		t.Errorf("expected line2AutoScroll=false when config disables it, got %v", d.TextLine2AutoScroll)
+	}
+}
+
 func TestPublishAlwaysSendsElevenLEDs(t *testing.T) {
 	cfg := testConfig()
 	st := store.New(cfg.BuildDefinitionIDs)
